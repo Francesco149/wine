@@ -3026,18 +3026,17 @@ void WCMD_move (void)
     WINE_TRACE("Source '%s'\n", wine_dbgstr_w(src));
     WINE_TRACE("Dest   '%s'\n", wine_dbgstr_w(dest));
 
-    /* If destination exists, prompt unless /Y supplied */
+    /* If destination exists, prompt unless called from batch */
     if (GetFileAttributesW(dest) != INVALID_FILE_ATTRIBUTES) {
-      BOOL force = FALSE;
+      BOOL force = !interactive;
       WCHAR copycmd[MAXSTRING];
       DWORD len;
 
-      /* /-Y has the highest priority, then /Y and finally the COPYCMD env. variable */
-      if (wcsstr (quals, parmNoY))
-        force = FALSE;
-      else if (wcsstr (quals, parmY))
-        force = TRUE;
-      else {
+      /* https://ss64.com/nt/move.html
+       * "Under Windows 2000 and above, the default action is to prompt on overwrite unless the
+       *  command is being executed from within a batch script. " */
+
+      if (!force) {
         static const WCHAR copyCmdW[] = {'C','O','P','Y','C','M','D','\0'};
         len = GetEnvironmentVariableW(copyCmdW, copycmd, ARRAY_SIZE(copycmd));
         force = (len && len < ARRAY_SIZE(copycmd) && !lstrcmpiW(copycmd, parmY));
@@ -3051,14 +3050,16 @@ void WCMD_move (void)
         question = WCMD_format_string(WCMD_LoadMessage(WCMD_OVERWRITE), dest);
         ok = WCMD_ask_confirm(question, FALSE, NULL);
         LocalFree(question);
+      } else {
+        ok = TRUE;
+      }
 
-        /* So delete the destination prior to the move */
-        if (ok) {
-          if (!DeleteFileW(dest)) {
-            WCMD_print_error ();
-            errorlevel = 1;
-            ok = FALSE;
-          }
+      /* So delete the destination prior to the move */
+      if (ok) {
+        if (!DeleteFileW(dest)) {
+          WCMD_print_error ();
+          errorlevel = 1;
+          ok = FALSE;
         }
       }
     }
